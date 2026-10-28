@@ -53,7 +53,6 @@ class HttpFetcherTest {
         server.createContext("/moved", exchange -> redirect(exchange, "/page"));
         server.createContext("/missing", exchange -> respond(exchange, 404, "not found"));
         server.createContext("/large", exchange -> respond(exchange, 200, "x".repeat((int) MAX_BYTES + 1)));
-        // "/hops?n" redirects n more times before answering.
         server.createContext("/hops", exchange -> {
             requests.incrementAndGet();
             int remaining = Integer.parseInt(exchange.getRequestURI().getQuery());
