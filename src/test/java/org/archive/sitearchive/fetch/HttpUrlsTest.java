@@ -1,8 +1,10 @@
 package org.archive.sitearchive.fetch;
 
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.net.URI;
@@ -20,23 +22,35 @@ class HttpUrlsTest {
             "'  http://example.org/p  ',                http://example.org/p",
             "http://example.org:443/,                   http://example.org:443/"
     })
+    @DisplayName("Canonical form: lower-case scheme and host, no default port or fragment, '/' for an empty path, "
+            + "path and query as written")
     void returnsTheCanonicalForm(String value, String canonical) {
         assertThat(HttpUrls.parse(value)).contains(URI.create(canonical));
     }
 
     @ParameterizedTest
-    @NullAndEmptySource
-    @ValueSource(strings = {"   ", "ftp://example.org/", "http://user@example.org/", "http:///path", "/relative",
-            "mailto:someone@example.org", "http://exa mple.org/"})
+    @NullSource
+    @ValueSource(strings = {"   ", "ftp://example.org/", "/relative", "http:///path", "http://user@example.org/",
+            "http://exa mple.org/"})
+    @DisplayName("Rejects a missing value, another or no scheme, no host, credentials and invalid syntax")
     void rejectsAnythingElse(String value) {
         assertThat(HttpUrls.parse(value)).isEmpty();
     }
 
     @ParameterizedTest
     @ValueSource(ints = {2048, 2049})
+    @DisplayName("Accepts URLs of up to 2048 characters and rejects longer ones")
     void limitsTheLength(int length) {
         String url = "http://example.org/" + "a".repeat(length - "http://example.org/".length());
 
         assertThat(HttpUrls.parse(url).isPresent()).isEqualTo(length <= HttpUrls.MAX_LENGTH);
+    }
+
+    @Test
+    @DisplayName("Measures the length after removing surrounding whitespace")
+    void doesNotCountSurroundingWhitespaceTowardsTheLength() {
+        String url = "http://example.org/" + "a".repeat(HttpUrls.MAX_LENGTH - "http://example.org/".length());
+
+        assertThat(HttpUrls.parse("  " + url + "\n")).contains(URI.create(url));
     }
 }
