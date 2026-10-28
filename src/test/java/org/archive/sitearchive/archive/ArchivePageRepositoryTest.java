@@ -131,32 +131,14 @@ class ArchivePageRepositoryTest {
     }
 
     private UUID job() {
-        return jobs.saveAndFlush(ArchiveJob.queue("https://example.org/sitemap.xml", 10, T0)).getId();
-    }
-
-    private ArchivePage pending(UUID job, String path, int attempts) {
-        ArchivePage page = ArchivePage.pending(job, "https://example.org" + path, T0);
-        for (int i = 0; i < attempts; i++) {
-            page.recordAttemptStarted(T0);
-        }
-        return pages.saveAndFlush(page);
+        return jobs.saveAndFlush(ArchiveJobs.job(T0, ArchiveJobStatus.QUEUED)).getId();
     }
 
     private ArchivePage page(UUID job, String path, PageStatus status) {
-        ArchivePage page = ArchivePage.pending(job, "https://example.org" + path, T0);
-        switch (status) {
-            case PENDING -> {
-            }
-            case SUCCEEDED -> {
-                page.recordAttemptStarted(T0);
-                page.markSucceeded(200, "https://example.org" + path + "/final", "text/html; charset=utf-8",
-                        "pages" + path + ".html", 123, T0);
-            }
-            case FAILED -> {
-                page.recordAttemptStarted(T0);
-                page.markFailed(404, "HTTP status 404");
-            }
-        }
-        return pages.saveAndFlush(page);
+        return pages.saveAndFlush(ArchiveJobs.page(job, path, status));
+    }
+
+    private ArchivePage pending(UUID job, String path, int attempts) {
+        return pages.saveAndFlush(ArchiveJobs.pending(job, path, attempts));
     }
 }

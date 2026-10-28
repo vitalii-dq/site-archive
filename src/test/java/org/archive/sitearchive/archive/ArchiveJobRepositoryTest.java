@@ -127,21 +127,6 @@ class ArchiveJobRepositoryTest {
     }
 
     private UUID save(Instant createdAt, ArchiveJobStatus status) {
-        return jobs.saveAndFlush(job(createdAt, status)).getId();
-    }
-
-    private static ArchiveJob job(Instant createdAt, ArchiveJobStatus status) {
-        ArchiveJob job = ArchiveJob.queue("https://example.org/sitemap.xml", 10, createdAt);
-        switch (status) {
-            case QUEUED -> {
-            }
-            case RUNNING -> job.start(createdAt);
-            case FAILED -> {
-                job.start(createdAt);
-                job.fail("failed", createdAt);
-            }
-            default -> throw new IllegalArgumentException("Not needed by these tests: " + status);
-        }
-        return job;
+        return jobs.saveAndFlush(ArchiveJobs.job(createdAt, status)).getId();
     }
 }
