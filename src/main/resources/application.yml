@@ -1,0 +1,61 @@
+spring:
+  application:
+    name: site-archive
+  datasource:
+    url: jdbc:postgresql://localhost:5433/site_archive
+    username: site_archive
+    password: site_archive
+  jpa:
+    open-in-view: false
+    hibernate:
+      # The schema is owned by Liquibase; Hibernate only checks that the mappings match it.
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  mvc:
+    apiversion:
+      # The version is the second path segment: /api/{version}/... (e.g. /api/v1/archives).
+      # Every endpoint serves all supported versions; any other version is rejected with 400.
+      use:
+        path-segment: 1
+      supported: 1
+  jackson:
+    deserialization:
+      # Reject 2.5 for an integer field (e.g. maxPages) instead of silently truncating it to 2.
+      accept-float-as-int: false
+  data:
+    web:
+      pageable:
+        default-page-size: 20
+        # Larger requested sizes are reduced to this.
+        max-page-size: 100
+
+server:
+  shutdown: graceful
+
+archive:
+  storage:
+    root: ./data/archives
+  limits:
+    default-max-pages: 100
+    max-pages-limit: 1000
+    max-sitemap-size: 10MB
+    max-page-size: 5MB
+    max-asset-size: 25MB
+    max-assets-per-job: 2000
+    max-redirects: 5
+    connect-timeout: 5s
+    request-timeout: 20s
+  fetch:
+    user-agent: SiteArchiveBot/1.0
+  retry:
+    max-attempts: 3
+    initial-backoff: 1s
+    multiplier: 2.0
+    max-backoff: 10s
+  worker:
+    concurrency: 2
+    poll-interval: 2s
+    error-pause: 5s
