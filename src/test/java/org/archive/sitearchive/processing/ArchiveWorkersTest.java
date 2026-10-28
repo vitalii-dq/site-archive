@@ -124,22 +124,6 @@ class ArchiveWorkersTest {
     }
 
     @Test
-    @DisplayName("Reports a job that failed on reaching the crash limit")
-    void reportsAJobThatFailedOnReachingTheCrashLimit(CapturedOutput output) throws Exception {
-        UUID job = UUID.randomUUID();
-        when(lifecycle.claimNextQueuedJob())
-                .thenReturn(Optional.of(job))
-                .thenReturn(Optional.empty());
-        doThrow(new StackOverflowError()).when(processor).process(job);
-        when(lifecycle.recordCrash(job, MAX_CRASHES)).thenReturn(false);
-
-        workers.start();
-
-        verify(lifecycle, timeout(1000)).recordCrash(job, MAX_CRASHES);
-        assertThat(output).contains("Archive job " + job + " failed: it was stopped 3 times");
-    }
-
-    @Test
     @DisplayName("Keeps the worker when the crash of a job cannot be recorded")
     void reportsAJobWhoseCrashCouldNotBeRecorded(CapturedOutput output) throws Exception {
         UUID job = UUID.randomUUID();

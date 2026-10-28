@@ -215,7 +215,8 @@ public final class HtmlAssetLinks {
             return pageUrl;
         }
         try {
-            return HttpUrls.parse(pageUrl.resolve(new URI(base.attr("href").strip())).toString()).orElse(pageUrl);
+            return HttpUrls.parse(HttpUrls.resolve(pageUrl, new URI(base.attr("href").strip())).toString())
+                    .orElse(pageUrl);
         } catch (URISyntaxException | IllegalArgumentException e) {
             return pageUrl;
         }

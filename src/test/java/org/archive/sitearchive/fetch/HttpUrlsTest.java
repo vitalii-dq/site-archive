@@ -46,6 +46,31 @@ class HttpUrlsTest {
         assertThat(HttpUrls.parse(url).isPresent()).isEqualTo(length <= HttpUrls.MAX_LENGTH);
     }
 
+    @ParameterizedTest
+    @CsvSource({"2047, true", "2048, false"})
+    @DisplayName("Measures the canonical form too, which is one longer when '/' is added for an empty path")
+    void limitsTheLengthOfTheCanonicalForm(int length, boolean accepted) {
+        String url = "http://example.org?" + "a".repeat(length - "http://example.org?".length());
+
+        assertThat(HttpUrls.parse(url).isPresent()).isEqualTo(accepted);
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "?page=2,       https://example.org/blog/post.html?page=2",
+            "?page=2#top,   https://example.org/blog/post.html?page=2#top",
+            "other.html?a,  https://example.org/blog/other.html?a",
+            "/x?a,          https://example.org/x?a",
+            "#top,          https://example.org/blog/post.html?old=1#top",
+            "//cdn.test/a,  https://cdn.test/a"
+    })
+    @DisplayName("Resolves as RFC 3986 does, keeping the base path for a reference that is only a query")
+    void resolvesAsRfc3986Does(String reference, String resolved) {
+        URI base = URI.create("https://example.org/blog/post.html?old=1");
+
+        assertThat(HttpUrls.resolve(base, URI.create(reference))).isEqualTo(URI.create(resolved));
+    }
+
     @Test
     @DisplayName("Measures the length after removing surrounding whitespace")
     void doesNotCountSurroundingWhitespaceTowardsTheLength() {

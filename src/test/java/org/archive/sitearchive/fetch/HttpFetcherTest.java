@@ -161,6 +161,23 @@ class HttpFetcherTest {
     }
 
     @Test
+    @DisplayName("Resolves a redirect to a query against the current path, as RFC 3986 does")
+    void resolvesARedirectToAQueryAgainstTheCurrentPath() throws Exception {
+        server.createContext("/list", exchange -> {
+            if (exchange.getRequestURI().getQuery() == null) {
+                redirect(exchange, "?page=2");
+            } else {
+                respond(exchange, 200, "page 2");
+            }
+        });
+
+        FetchedResponse<byte[]> response = fetcher.fetch(url("/list"), MAX_BYTES, origin);
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.finalUrl()).isEqualTo(url("/list?page=2"));
+    }
+
+    @Test
     @DisplayName("Fails permanently on one redirect more than the limit, without following it")
     void refusesMoreRedirectsThanTheLimit() {
         assertThatThrownBy(() -> fetcher.fetch(url("/hops?" + (MAX_REDIRECTS + 1)), MAX_BYTES, origin))

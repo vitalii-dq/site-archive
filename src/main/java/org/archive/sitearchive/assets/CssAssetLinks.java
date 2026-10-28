@@ -21,12 +21,13 @@ public final class CssAssetLinks {
 
     // Comments come first so that references inside them are skipped. Stylesheets come from the archived site, so
     // no alternative may rescan the rest of the input from every start position: an unclosed comment runs to the
-    // end, as in CSS, and an unquoted URL cannot contain '(', which CSS does not allow there either. Otherwise
-    // input such as "/* /* /* ..." or "url(url(url(..." takes quadratic time.
+    // end, as in CSS, and an unquoted URL cannot contain '(', which CSS does not allow there either. Whitespace is
+    // matched possessively, so that the two runs around a URL cannot trade characters. Otherwise input such as
+    // "/* /* /* ...", "url(url(url(..." or "url(" and a long run of whitespace takes quadratic time.
     private static final Pattern REFERENCE = Pattern.compile(
             "/\\*.*?(?:\\*/|\\z)"
-                    + "|(?<![\\w-])url\\(\\s*(?:\"([^\"]*)\"|'([^']*)'|([^()\"'\\s]*+))\\s*\\)"
-                    + "|@import\\s+(?:\"([^\"]*)\"|'([^']*)')",
+                    + "|(?<![\\w-])url\\(\\s*+(?:\"([^\"]*)\"|'([^']*)'|([^()\"'\\s]*+))\\s*+\\)"
+                    + "|@import\\s++(?:\"([^\"]*)\"|'([^']*)')",
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
     private static final List<MediaType> CSS_MEDIA_TYPES = List.of(MediaType.valueOf("text/css"));

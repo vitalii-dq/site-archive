@@ -75,8 +75,8 @@ class CssAssetLinksTest {
     @Test
     @DisplayName("Takes linear time on hostile input")
     void takesLinearTimeOnHostileInput() {
-        // Both took tens of seconds at this size when every match attempt rescanned the rest of the input.
-        for (String css : List.of("/* ".repeat(70_000), "url(".repeat(50_000))) {
+        // Each took seconds to tens of seconds at this size when a match attempt rescanned the rest of the input.
+        for (String css : List.of("/* ".repeat(70_000), "url(".repeat(50_000), "url(" + " ".repeat(100_000))) {
             assertTimeoutPreemptively(Duration.ofSeconds(2), () -> CssAssetLinks.find(bytes(css), STYLESHEET));
         }
     }

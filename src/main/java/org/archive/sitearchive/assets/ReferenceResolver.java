@@ -38,7 +38,7 @@ final class ReferenceResolver implements UnaryOperator<String> {
         URI resolved;
         try {
             uri = new URI(value);
-            resolved = base.resolve(uri);
+            resolved = HttpUrls.resolve(base, uri);
         } catch (URISyntaxException | IllegalArgumentException e) {
             return null;
         }

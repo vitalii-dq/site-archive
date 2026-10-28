@@ -163,7 +163,7 @@ public class HttpFetcher {
                 .orElseThrow(() -> FetchException.permanent("Redirect without a Location header"));
         URI target;
         try {
-            target = current.resolve(location.strip());
+            target = HttpUrls.resolve(current, URI.create(location.strip()));
         } catch (IllegalArgumentException e) {
             throw FetchException.permanent("Redirect to an invalid location: " + location);
         }

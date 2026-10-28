@@ -24,6 +24,7 @@ class ReferenceResolverTest {
             "/img/a.png#part,                    ../assets/1-a.png#part",
             "/img/a.png?v=2,                     https://example.org/img/a.png?v=2",
             "other.png,                          https://example.org/blog/other.png",
+            "?v=2,                               https://example.org/blog/post.html?v=2",
             "//cdn.example.com/x.js,             https://cdn.example.com/x.js",
             "/img/café.png,                      https://example.org/img/caf%C3%A9.png"
     })
