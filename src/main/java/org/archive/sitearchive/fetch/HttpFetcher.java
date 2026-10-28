@@ -9,15 +9,19 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpResponse.BodySubscriber;
 import java.net.http.HttpResponse.BodySubscribers;
 import java.net.http.HttpResponse.ResponseInfo;
 import java.net.http.HttpTimeoutException;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 
 /**
  * Downloads a single URL within the configured limits. Redirects are followed here rather than by the
@@ -42,19 +46,42 @@ public class HttpFetcher {
     }
 
     /**
+     * Downloads the body into memory. Only for bodies that are needed in memory anyway, such as the sitemap; use
+     * {@link #fetchToFile} for anything that is stored.
+     *
      * @param requiredOrigin origin every hop must stay within, or {@code null} for no restriction
      */
-    public FetchedResponse fetch(URI url, long maxBodyBytes, WebOrigin requiredOrigin)
+    public FetchedResponse<byte[]> fetch(URI url, long maxBodyBytes, WebOrigin requiredOrigin)
+            throws FetchException, InterruptedException {
+        return fetch(url, maxBodyBytes, requiredOrigin, BodySubscribers::ofByteArray);
+    }
+
+    /**
+     * Streams the body into {@code file}, so that it is never held in memory. The file must not exist yet: use a new
+     * one for every attempt, since a cancelled exchange may still be writing to the previous one. It is created only
+     * for a successful response, and may be left behind, incomplete, when the download fails; deleting it is up to
+     * the caller.
+     *
+     * @param requiredOrigin origin every hop must stay within, or {@code null} for no restriction
+     */
+    public FetchedResponse<Path> fetchToFile(URI url, long maxBodyBytes, WebOrigin requiredOrigin, Path file)
+            throws FetchException, InterruptedException {
+        return fetch(url, maxBodyBytes, requiredOrigin,
+                () -> BodySubscribers.ofFile(file, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE));
+    }
+
+    private <B> FetchedResponse<B> fetch(URI url, long maxBodyBytes, WebOrigin requiredOrigin,
+                                         Supplier<BodySubscriber<B>> successfulBody)
             throws FetchException, InterruptedException {
         URI current = url;
         for (int redirects = 0; ; redirects++) {
             if (requiredOrigin != null && !requiredOrigin.contains(current)) {
                 throw FetchException.permanent("Redirected outside the site origin " + requiredOrigin + " to " + current);
             }
-            HttpResponse<byte[]> response = send(current, maxBodyBytes);
+            HttpResponse<B> response = send(current, maxBodyBytes, successfulBody);
             if (!isRedirect(response.statusCode())) {
                 String contentType = response.headers().firstValue(HttpHeaders.CONTENT_TYPE).orElse(null);
-                return new FetchedResponse(current, response.statusCode(), contentType, response.body());
+                return new FetchedResponse<>(current, response.statusCode(), contentType, response.body());
             }
             if (redirects == maxRedirects) {
                 throw FetchException.permanent("Too many redirects (limit is " + maxRedirects + ")");
@@ -63,14 +90,15 @@ public class HttpFetcher {
         }
     }
 
-    private HttpResponse<byte[]> send(URI url, long maxBodyBytes) throws FetchException, InterruptedException {
+    private <B> HttpResponse<B> send(URI url, long maxBodyBytes, Supplier<BodySubscriber<B>> successfulBody)
+            throws FetchException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(url)
                 .timeout(requestTimeout)
                 .header(HttpHeaders.USER_AGENT, userAgent)
                 .GET()
                 .build();
-        CompletableFuture<HttpResponse<byte[]>> exchange =
-                httpClient.sendAsync(request, info -> bodySubscriber(info, maxBodyBytes));
+        CompletableFuture<HttpResponse<B>> exchange =
+                httpClient.sendAsync(request, info -> bodySubscriber(info, maxBodyBytes, successfulBody));
         try {
             return exchange.get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
@@ -89,14 +117,15 @@ public class HttpFetcher {
      * length is over the limit is refused before any of it is read. A body without a declared length is cut off
      * by the JDK once it passes the limit; that failure is an ordinary {@link IOException}, so it is retried.
      */
-    private static HttpResponse.BodySubscriber<byte[]> bodySubscriber(ResponseInfo info, long maxBodyBytes) {
+    private static <B> BodySubscriber<B> bodySubscriber(ResponseInfo info, long maxBodyBytes,
+                                                       Supplier<BodySubscriber<B>> successfulBody) {
         if (!FetchedResponse.isSuccessful(info.statusCode())) {
-            return BodySubscribers.replacing(new byte[0]);
+            return BodySubscribers.replacing(null);
         }
         if (info.headers().firstValueAsLong(HttpHeaders.CONTENT_LENGTH).orElse(-1) > maxBodyBytes) {
             throw new ResponseTooLargeException();
         }
-        return BodySubscribers.limiting(BodySubscribers.ofByteArray(), maxBodyBytes);
+        return BodySubscribers.limiting(successfulBody.get(), maxBodyBytes);
     }
 
     private static FetchException translate(Throwable failure, long maxBodyBytes) {

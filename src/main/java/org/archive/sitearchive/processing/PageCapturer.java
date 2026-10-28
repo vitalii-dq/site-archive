@@ -9,9 +9,10 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
+import java.nio.file.Path;
 import java.util.List;
 
-/** One capture attempt for one page: a successful, same-origin HTML response. */
+/** One capture attempt for one page: a successful, same-origin HTML response, streamed into a file. */
 @Component
 class PageCapturer {
 
@@ -25,8 +26,9 @@ class PageCapturer {
         this.maxPageBytes = properties.limits().maxPageSize().toBytes();
     }
 
-    FetchedResponse capture(URI url, WebOrigin siteOrigin) throws FetchException, InterruptedException {
-        FetchedResponse response = fetcher.fetch(url, maxPageBytes, siteOrigin).requireSuccess();
+    /** See {@link HttpFetcher#fetchToFile} for what {@code file} must be, and what is left in it on failure. */
+    FetchedResponse<Path> capture(URI url, WebOrigin siteOrigin, Path file) throws FetchException, InterruptedException {
+        FetchedResponse<Path> response = fetcher.fetchToFile(url, maxPageBytes, siteOrigin, file).requireSuccess();
         if (!response.hasMediaType(HTML_MEDIA_TYPES)) {
             String contentType = response.contentType() == null ? "none" : response.contentType();
             throw FetchException.permanent("Not an HTML page (Content-Type: " + contentType + ")", response.statusCode());

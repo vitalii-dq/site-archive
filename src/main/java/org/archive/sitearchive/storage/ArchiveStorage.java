@@ -62,21 +62,31 @@ public class ArchiveStorage {
         }
     }
 
-    /** Stores the captured HTML unmodified and returns its file name relative to the job directory. */
-    public String storePage(UUID jobId, long pageId, URI sourceUrl, byte[] html) {
-        String fileName = CaptureFileNames.forPage(pageId, sourceUrl);
-        writeAtomically(jobId, resolveInJob(jobId, fileName), out -> out.write(html));
-        return fileName;
+    /**
+     * A new path in the job's staging directory, for a download in progress; the file itself does not exist yet.
+     * Publish it with {@link #publishPage} or {@link #publishAsset}, or delete it with {@link #discard}.
+     */
+    public Path newStagingFile(UUID jobId) {
+        return jobDirectory(jobId).resolve(STAGING_DIRECTORY).resolve(UUID.randomUUID() + ".tmp");
     }
 
-    /** Stores the captured asset unmodified and returns its file name relative to the job directory. */
-    public String storeAsset(UUID jobId, int assetNumber, URI sourceUrl, String contentType, byte[] content) {
-        String fileName = CaptureFileNames.forAsset(assetNumber, sourceUrl, contentType);
-        writeAtomically(jobId, resolveInJob(jobId, fileName), out -> out.write(content));
-        return fileName;
+    /** Moves a captured page, unmodified, from the staging directory into place. */
+    public StoredFile publishPage(UUID jobId, long pageId, URI sourceUrl, Path staged) {
+        return publish(jobId, staged, CaptureFileNames.forPage(pageId, sourceUrl));
     }
 
-    public byte[] readPage(UUID jobId, String fileName) {
+    /** Moves a captured asset, unmodified, from the staging directory into place. */
+    public StoredFile publishAsset(UUID jobId, int assetNumber, URI sourceUrl, String contentType, Path staged) {
+        return publish(jobId, staged, CaptureFileNames.forAsset(assetNumber, sourceUrl, contentType));
+    }
+
+    /** Deletes a staged file that was not published; does nothing if it was published or never created. */
+    public void discard(Path staged) {
+        deleteQuietly(staged);
+    }
+
+    /** Reads a captured page or asset. */
+    public byte[] readFile(UUID jobId, String fileName) {
         try {
             return Files.readAllBytes(resolveInJob(jobId, fileName));
         } catch (IOException e) {
@@ -126,11 +136,20 @@ public class ArchiveStorage {
         }
     }
 
-    private void writeAtomically(UUID jobId, Path target, ContentWriter writer) {
-        Path staged = null;
+    private StoredFile publish(UUID jobId, Path staged, String fileName) {
+        Path target = resolveInJob(jobId, fileName);
         try {
-            // Not Files.createTempFile: its owner-only permissions would carry over to the published file.
-            staged = jobDirectory(jobId).resolve(STAGING_DIRECTORY).resolve(UUID.randomUUID() + ".tmp");
+            long size = Files.size(staged);
+            Files.move(staged, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            return new StoredFile(fileName, size);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not write " + target, e);
+        }
+    }
+
+    private void writeAtomically(UUID jobId, Path target, ContentWriter writer) {
+        Path staged = newStagingFile(jobId);
+        try {
             try (OutputStream out = Files.newOutputStream(staged, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
                 writer.write(out);
             }
@@ -161,9 +180,6 @@ public class ArchiveStorage {
     }
 
     private static void deleteQuietly(Path path) {
-        if (path == null) {
-            return;
-        }
         try {
             Files.deleteIfExists(path);
         } catch (IOException ignored) {

@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,6 +20,9 @@ import java.util.UUID;
  */
 @Service
 public class ArchiveJobLifecycle {
+
+    static final String CRASH_LIMIT_SUMMARY = "The archive job was abandoned after a crash of the service or a fatal "
+            + "error stopped it %d times. The job itself may be the cause, for example by needing too much memory.";
 
     private final ArchiveJobRepository jobs;
     private final ArchivePageRepository pages;
@@ -64,9 +68,9 @@ public class ArchiveJobLifecycle {
     }
 
     @Transactional
-    public void markPageSucceeded(long pageId, FetchedResponse response, String fileName) {
+    public void markPageSucceeded(long pageId, FetchedResponse<?> response, String fileName, long sizeBytes) {
         getPage(pageId).markSucceeded(response.statusCode(), response.finalUrl().toString(), response.contentType(),
-                fileName, response.body().length, clock.instant());
+                fileName, sizeBytes, clock.instant());
     }
 
     @Transactional
@@ -89,13 +93,55 @@ public class ArchiveJobLifecycle {
         getJob(jobId).fail(errorSummary, clock.instant());
     }
 
-    /** Returns jobs left RUNNING by a previous process to the queue. Assumes a single application instance. */
+    /**
+     * Returns the job of a worker that was stopped for a shutdown to the queue, so that the next start does not
+     * count it as a crash. Does nothing if the job finished in the meantime.
+     */
     @Transactional
-    public List<UUID> requeueInterruptedJobs() {
+    public void requeueStoppedJob(UUID jobId) {
+        ArchiveJob job = getJob(jobId);
+        if (job.getStatus() == ArchiveJobStatus.RUNNING) {
+            job.requeueAfterInterruption(clock.instant());
+        }
+    }
+
+    /**
+     * Recovers the jobs left RUNNING by a previous process. Workers hand their job back when they are stopped, so
+     * such a job was running when the process crashed or was killed, for example by
+     * {@code -XX:+ExitOnOutOfMemoryError}. Each one counts a crash, see {@link #recordCrash(UUID, int)}. Assumes a
+     * single application instance.
+     */
+    @Transactional
+    public RecoveredJobs recoverCrashedJobs(int maxCrashes) {
         Instant now = clock.instant();
-        List<ArchiveJob> interrupted = jobs.findByStatus(ArchiveJobStatus.RUNNING);
-        interrupted.forEach(job -> job.requeueAfterInterruption(now));
-        return interrupted.stream().map(ArchiveJob::getId).toList();
+        List<UUID> requeued = new ArrayList<>();
+        List<UUID> failed = new ArrayList<>();
+        for (ArchiveJob job : jobs.findByStatus(ArchiveJobStatus.RUNNING)) {
+            (recordCrash(job, maxCrashes, now) ? requeued : failed).add(job.getId());
+        }
+        return new RecoveredJobs(requeued, failed);
+    }
+
+    /**
+     * Counts a crash of a running job: the service crashed, or a fatal error stopped the job. The job is requeued,
+     * unless this was its {@code maxCrashes}th crash: the job itself may be the cause, so it is failed instead of
+     * being retried forever.
+     *
+     * @return whether the job was requeued
+     */
+    @Transactional
+    public boolean recordCrash(UUID jobId, int maxCrashes) {
+        return recordCrash(getJob(jobId), maxCrashes, clock.instant());
+    }
+
+    private static boolean recordCrash(ArchiveJob job, int maxCrashes, Instant now) {
+        job.recordCrash(now);
+        if (job.getCrashCount() >= maxCrashes) {
+            job.fail(CRASH_LIMIT_SUMMARY.formatted(job.getCrashCount()), now);
+            return false;
+        }
+        job.requeueAfterInterruption(now);
+        return true;
     }
 
     private ArchiveJob getJob(UUID jobId) {

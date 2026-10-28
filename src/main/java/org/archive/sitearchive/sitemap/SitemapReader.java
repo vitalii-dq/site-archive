@@ -39,7 +39,7 @@ public class SitemapReader {
         if (sitemapUrl.getPath().toLowerCase(Locale.ROOT).endsWith(".gz")) {
             throw new SitemapException(COMPRESSED_SITEMAP_MESSAGE, false);
         }
-        FetchedResponse response;
+        FetchedResponse<byte[]> response;
         try {
             response = fetcher.fetch(sitemapUrl, maxSitemapBytes, null).requireSuccess();
         } catch (FetchException e) {
@@ -77,7 +77,7 @@ public class SitemapReader {
         return new SitemapUrls(origin, pageUrls, listed, listed - pageUrls.size());
     }
 
-    private static boolean isGzip(FetchedResponse response) {
+    private static boolean isGzip(FetchedResponse<byte[]> response) {
         byte[] body = response.body();
         boolean gzipMagic = body.length >= 2 && (body[0] & 0xff) == 0x1f && (body[1] & 0xff) == 0x8b;
         return gzipMagic || response.hasMediaType(GZIP_MEDIA_TYPES);

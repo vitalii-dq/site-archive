@@ -58,4 +58,4 @@ archive:
   worker:
     concurrency: 2
     poll-interval: 2s
-    error-pause: 5s
+    max-crashes-per-job: 3

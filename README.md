@@ -68,6 +68,7 @@ variables (Spring Boot relaxed binding, e.g. `archive.limits.max-page-size` → 
 | `archive.retry.max-backoff`             | `10s`               | Upper bound for a single wait                             |
 | `archive.worker.concurrency`            | `2`                 | Worker threads, i.e. jobs processed in parallel           |
 | `archive.worker.poll-interval`          | `2s`                | How long an idle worker waits before checking again       |
+| `archive.worker.max-crashes-per-job`    | `3`                 | Crashes or fatal errors during a job before it is failed  |
 
 ## API
 
@@ -181,7 +182,7 @@ Validation errors always share this format:
 QUEUED ──> RUNNING ──> COMPLETED
               │  ├───> COMPLETED_WITH_ERRORS
               │  └───> FAILED
-              └──────> QUEUED   (only when recovering after a restart)
+              └──────> QUEUED   (on shutdown, or when recovering after a crash)
 ```
 
 1. **Claiming.** A fixed number of workers (`worker.concurrency`, each on a virtual thread) each run the same loop: claim the
@@ -196,7 +197,7 @@ QUEUED ──> RUNNING ──> COMPLETED
    - The first `maxPages` URLs that belong to the sitemap's origin are recorded as `PENDING` pages, in the same
      transaction that records the sitemap counts.
 3. **Pages.** Pages are captured one at a time. Each attempt is counted in the database before it starts.
-   - A successful page is written to disk unmodified.
+   - A successful page is streamed to disk unmodified, never held in memory.
    - Transient failures are retried with exponential backoff (Spring's `ExponentialBackOff`), up to
      `retry.max-attempts`: network errors,
      timeouts, `429` and `5xx`. No database transaction is open while waiting.
@@ -221,13 +222,23 @@ Network calls, backoff and ZIP generation all happen outside database transactio
 
 ### Restarts and recovery
 
-- **Shutdown.** Running workers are interrupted and their jobs stay `RUNNING`, so they resume after the restart.
-- **Unexpected errors.** Any other job that stops unexpectedly is marked `FAILED`. Only if even that is
-  impossible (the database is unreachable) does it stay `RUNNING` until the next start. After an `Error`, such
-  as `OutOfMemoryError`, the worker that hit it also stops, so that a persistent error cannot fail the whole
-  queue; a restart brings it back.
-- **Startup.** Before the workers start, every `RUNNING` job is moved back to `QUEUED` and is then
-  processed again. Re-running a job is safe:
+- **Shutdown.** Running workers are interrupted and hand their jobs back to the queue (`QUEUED`), so they resume
+  after the restart.
+- **Unexpected errors.** A job stopped by an exception is marked `FAILED`. Only if even that is impossible (the
+  database is unreachable) does it stay `RUNNING` until the next start.
+- **Fatal errors.** An `Error` counts as a crash of the job, which may or may not be at fault, so it is not marked
+  `FAILED` straight away: its crash count goes up and it is requeued. Once the count reaches
+  `worker.max-crashes-per-job`, it is marked `FAILED`, since it may be the cause itself. The worker carries on; after
+  an `Error` outside a job, it waits `worker.poll-interval` first, so that a recurring error cannot spin it.
+  - `OutOfMemoryError`: start the JVM with `-XX:+ExitOnOutOfMemoryError`, so that the whole process exits at once,
+    and run it under a supervisor that restarts it (Docker restart policy, systemd, Kubernetes). The job stays
+    `RUNNING` and is recovered on the next start.
+  - Any other `Error`, such as a `StackOverflowError` on a deeply nested page, is handled at once in the running
+    process.
+- **Startup.** A job that is still `RUNNING` was not handed back, so the previous process crashed or was killed
+  during it. Before the workers start, each such job counts a crash in the same way: it is moved back to `QUEUED`
+  to be processed again, or marked `FAILED` once it reaches `worker.max-crashes-per-job` crashes, as otherwise a job
+  that brings the service down would do so on every start. Re-running a job is safe:
   - the sitemap stage runs only once per job, and the unique `(archive_job_id, source_url)` constraint
     prevents duplicate page records;
   - pages that already succeeded are skipped, and attempt counts carry over, so a page cannot be retried
@@ -297,7 +308,7 @@ would need worker leases or heartbeats instead, and distributed coordination is 
 ```
 data/archives/
 └── {archiveId}/
-    ├── .staging/                 incomplete writes (cleared when a run starts)
+    ├── .staging/                 downloads in progress and incomplete writes (cleared when a run starts)
     ├── pages/
     │   ├── 1-index.html          captured HTML, byte-for-byte as served
     │   └── 2-about.html
@@ -328,7 +339,7 @@ ZIP.
 Liquibase owns the schema (`src/main/resources/db/changelog`), and Hibernate only validates it
 (`ddl-auto: validate`).
 
-- **`archive_job`:** request parameters, status, sitemap counts, error summary, ZIP reference, timestamps and
+- **`archive_job`:** request parameters, status, sitemap counts, error summary, ZIP reference, crash count, timestamps and
   an optimistic-lock version.
   - partial index `(created_at, id) WHERE status = 'QUEUED'` for claiming jobs
   - `(created_at DESC, id DESC)` for job history
@@ -419,7 +430,8 @@ for job lists), so there are no counters to keep in sync.
 - **Assets:** only the references listed under [Assets](#assets). Lazy-loading attributes such as `data-src`,
   SVG `<image>`/`<use>`, `<audio>`/`<video>` media, JavaScript `import`s and files that scripts fetch at
   runtime are not captured. Assets skipped because of `max-assets-per-job` are only reported in the log.
-- **Memory:** pages and assets are buffered in memory up to `max-page-size` and `max-asset-size` before being
-  written.
+- **Memory:** pages and assets are streamed to disk, but some files are still read into memory whole: the
+  sitemap (up to `max-sitemap-size`), every page while its assets are found and while the ZIP is built (parsed
+  with jsoup, which takes several times the file size), and stylesheets (up to `max-asset-size`).
 - **Not built yet:** tests cover only asset link finding, rewriting and file naming; no metrics or health
   endpoint.

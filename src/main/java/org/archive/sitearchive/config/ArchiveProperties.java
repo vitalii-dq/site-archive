@@ -55,6 +55,10 @@ public record ArchiveProperties(
             @NotNull Duration maxBackoff) {
     }
 
-    public record Worker(@Positive int concurrency, @NotNull Duration pollInterval, @NotNull Duration errorPause) {
+    /**
+     * @param maxCrashesPerJob a job stopped this many times by a crash of the service or a fatal error is failed
+     *                         instead of being requeued
+     */
+    public record Worker(@Positive int concurrency, @NotNull Duration pollInterval, @Positive int maxCrashesPerJob) {
     }
 }

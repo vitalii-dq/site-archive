@@ -47,6 +47,10 @@ public class ArchiveJob {
     @Column(name = "archive_size_bytes")
     private Long archiveSizeBytes;
 
+    /** How often a crash of the service or a fatal error stopped this job. */
+    @Column(name = "crash_count", nullable = false)
+    private int crashCount;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -86,6 +90,13 @@ public class ArchiveJob {
 
     void requeueAfterInterruption(Instant now) {
         transitionTo(ArchiveJobStatus.QUEUED, now);
+    }
+
+    /** A crash of the service or a fatal error stopped this job. */
+    void recordCrash(Instant now) {
+        requireStatus(ArchiveJobStatus.RUNNING);
+        crashCount++;
+        updatedAt = now;
     }
 
     void recordSitemap(String siteOrigin, int sitemapUrlCount, int excludedUrlCount, Instant now) {
@@ -166,6 +177,10 @@ public class ArchiveJob {
 
     public Long getArchiveSizeBytes() {
         return archiveSizeBytes;
+    }
+
+    public int getCrashCount() {
+        return crashCount;
     }
 
     public Instant getCreatedAt() {

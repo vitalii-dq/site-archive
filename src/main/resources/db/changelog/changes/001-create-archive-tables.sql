@@ -13,6 +13,8 @@ CREATE TABLE archive_job (
     error_summary      TEXT,
     archive_file       VARCHAR(512),
     archive_size_bytes BIGINT,
+    -- How often a crash of the service or a fatal error stopped the job; see archive.worker.max-crashes-per-job.
+    crash_count        INTEGER       NOT NULL DEFAULT 0 CHECK (crash_count >= 0),
     created_at         TIMESTAMPTZ   NOT NULL,
     started_at         TIMESTAMPTZ,
     finished_at        TIMESTAMPTZ,

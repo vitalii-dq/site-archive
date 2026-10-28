@@ -54,6 +54,6 @@ class SitemapReaderTest {
         locations.lines().forEach(location -> xml.append("<url><loc>").append(location).append("</loc></url>"));
         byte[] body = xml.append("</urlset>").toString().getBytes(StandardCharsets.UTF_8);
         when(fetcher.fetch(any(), anyLong(), isNull()))
-                .thenReturn(new FetchedResponse(SITEMAP, 200, "application/xml", body));
+                .thenReturn(new FetchedResponse<>(SITEMAP, 200, "application/xml", body));
     }
 }

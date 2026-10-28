@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -63,7 +64,7 @@ class AssetCapturer {
         AssetQueue queue = new AssetQueue(siteOrigin);
         for (PageResult page : pages) {
             if (page.captured()) {
-                byte[] html = storage.readPage(jobId, page.fileName());
+                byte[] html = storage.readFile(jobId, page.fileName());
                 HtmlAssetLinks.Found found = HtmlAssetLinks.find(html, page.contentType(), URI.create(page.finalUrl()));
                 queue.addStyling(found.styling());
                 queue.addOther(found.other());
@@ -72,15 +73,15 @@ class AssetCapturer {
         List<ArchiveManifest.Asset> assets = new ArrayList<>();
         while (assets.size() < maxAssetsPerJob && !queue.isEmpty()) {
             URI url = queue.next();
+            int number = assets.size() + 1;
             try {
-                FetchedResponse response = retrier.run(retrier.maxAttempts(),
-                        () -> fetcher.fetch(url, maxAssetBytes, siteOrigin).requireSuccess());
-                String file = storage.storeAsset(jobId, assets.size() + 1, url, response.contentType(), response.body());
-                if (CssAssetLinks.isStylesheet(response.contentType())) {
-                    queue.addStyling(CssAssetLinks.find(response.body(), response.finalUrl()));
+                ArchiveManifest.Asset asset = retrier.run(retrier.maxAttempts(),
+                        () -> capture(jobId, number, url, siteOrigin));
+                if (CssAssetLinks.isStylesheet(asset.contentType())) {
+                    byte[] css = storage.readFile(jobId, asset.file());
+                    queue.addStyling(CssAssetLinks.find(css, URI.create(asset.finalUrl())));
                 }
-                assets.add(new ArchiveManifest.Asset(url.toString(), file, response.finalUrl().toString(),
-                        response.contentType(), null));
+                assets.add(asset);
             } catch (FetchException e) {
                 log.info("Archive job {}: asset {} failed: {}", jobId, url, e.getMessage());
                 assets.add(new ArchiveManifest.Asset(url.toString(), null, null, null, e.getMessage()));
@@ -91,6 +92,20 @@ class AssetCapturer {
                     jobId, maxAssetsPerJob, queue.size());
         }
         return new Result(assets, queue.size());
+    }
+
+    /** One attempt: streams the asset into a staging file and publishes it. */
+    private ArchiveManifest.Asset capture(UUID jobId, int number, URI url, WebOrigin siteOrigin)
+            throws FetchException, InterruptedException {
+        Path staged = storage.newStagingFile(jobId);
+        try {
+            FetchedResponse<Path> response = fetcher.fetchToFile(url, maxAssetBytes, siteOrigin, staged).requireSuccess();
+            String file = storage.publishAsset(jobId, number, url, response.contentType(), staged).fileName();
+            return new ArchiveManifest.Asset(url.toString(), file, response.finalUrl().toString(),
+                    response.contentType(), null);
+        } finally {
+            storage.discard(staged);
+        }
     }
 
     /**

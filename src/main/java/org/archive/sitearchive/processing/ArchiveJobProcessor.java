@@ -13,11 +13,13 @@ import org.archive.sitearchive.sitemap.SitemapUrls;
 import org.archive.sitearchive.storage.ArchiveManifest;
 import org.archive.sitearchive.storage.ArchiveStorage;
 import org.archive.sitearchive.storage.StoredArchive;
+import org.archive.sitearchive.storage.StoredFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
@@ -98,9 +100,14 @@ class ArchiveJobProcessor {
         try {
             retrier.run(attemptsLeft, () -> {
                 lifecycle.recordAttemptStarted(page.id());
-                FetchedResponse response = pageCapturer.capture(sourceUrl, siteOrigin);
-                String fileName = storage.storePage(jobId, page.id(), sourceUrl, response.body());
-                lifecycle.markPageSucceeded(page.id(), response, fileName);
+                Path staged = storage.newStagingFile(jobId);
+                try {
+                    FetchedResponse<Path> response = pageCapturer.capture(sourceUrl, siteOrigin, staged);
+                    StoredFile file = storage.publishPage(jobId, page.id(), sourceUrl, staged);
+                    lifecycle.markPageSucceeded(page.id(), response, file.fileName(), file.sizeBytes());
+                } finally {
+                    storage.discard(staged);
+                }
             });
         } catch (FetchException e) {
             log.info("Archive job {}: page {} failed: {}", jobId, page.sourceUrl(), e.getMessage());
