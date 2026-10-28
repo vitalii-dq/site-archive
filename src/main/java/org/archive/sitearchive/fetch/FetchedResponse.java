@@ -1,7 +1,6 @@
 package org.archive.sitearchive.fetch;
 
 import org.springframework.http.HttpStatusCode;
-import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 
 import java.net.URI;
@@ -29,16 +28,8 @@ public record FetchedResponse<B>(URI finalUrl, int statusCode, String contentTyp
         return this;
     }
 
-    /** Whether the Content-Type is one of the given types, ignoring parameters such as the charset. */
+    /** See {@link MediaTypes#matches}. */
     public boolean hasMediaType(Collection<MediaType> types) {
-        if (contentType == null) {
-            return false;
-        }
-        try {
-            MediaType mediaType = MediaType.parseMediaType(contentType);
-            return types.stream().anyMatch(mediaType::equalsTypeAndSubtype);
-        } catch (InvalidMediaTypeException e) {
-            return false;
-        }
+        return MediaTypes.matches(contentType, types);
     }
 }

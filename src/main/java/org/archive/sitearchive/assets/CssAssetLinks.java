@@ -1,6 +1,6 @@
 package org.archive.sitearchive.assets;
 
-import org.springframework.http.InvalidMediaTypeException;
+import org.archive.sitearchive.fetch.MediaTypes;
 import org.springframework.http.MediaType;
 
 import java.net.URI;
@@ -9,6 +9,7 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
@@ -28,18 +29,13 @@ public final class CssAssetLinks {
                     + "|@import\\s+(?:\"([^\"]*)\"|'([^']*)')",
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
+    private static final List<MediaType> CSS_MEDIA_TYPES = List.of(MediaType.valueOf("text/css"));
+
     private CssAssetLinks() {
     }
 
     public static boolean isStylesheet(String contentType) {
-        if (contentType == null) {
-            return false;
-        }
-        try {
-            return MediaType.parseMediaType(contentType).equalsTypeAndSubtype(MediaType.valueOf("text/css"));
-        } catch (InvalidMediaTypeException e) {
-            return false;
-        }
+        return MediaTypes.matches(contentType, CSS_MEDIA_TYPES);
     }
 
     /** The canonical URLs of all http(s) files the stylesheet references, in order of appearance. */

@@ -76,7 +76,9 @@ public class HttpFetcher {
         URI current = url;
         for (int redirects = 0; ; redirects++) {
             if (requiredOrigin != null && !requiredOrigin.contains(current)) {
-                throw FetchException.permanent("Redirected outside the site origin " + requiredOrigin + " to " + current);
+                throw FetchException.permanent(redirects == 0
+                        ? "Outside the site origin " + requiredOrigin + ": " + current
+                        : "Redirected outside the site origin " + requiredOrigin + " to " + current);
             }
             HttpResponse<B> response = send(current, maxBodyBytes, successfulBody);
             if (!isRedirect(response.statusCode())) {
@@ -103,7 +105,7 @@ public class HttpFetcher {
             return exchange.get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
             exchange.cancel(true);
-            throw FetchException.retryable("Request timed out after " + requestTimeout.toSeconds() + "s");
+            throw timedOut(e);
         } catch (InterruptedException e) {
             exchange.cancel(true);
             throw e;
@@ -128,14 +130,21 @@ public class HttpFetcher {
         return BodySubscribers.limiting(successfulBody.get(), maxBodyBytes);
     }
 
-    private static FetchException translate(Throwable failure, long maxBodyBytes) {
+    /** The client's own request timeout and the wait for the exchange use the same limit, so either may fire. */
+    private FetchException timedOut(Exception cause) {
+        long millis = requestTimeout.toMillis();
+        String limit = millis % 1000 == 0 ? millis / 1000 + "s" : millis + "ms";
+        return FetchException.retryable("Request timed out after " + limit, cause);
+    }
+
+    private FetchException translate(Throwable failure, long maxBodyBytes) {
         Throwable cause = failure instanceof CompletionException && failure.getCause() != null
                 ? failure.getCause()
                 : failure;
         return switch (cause) {
             case ResponseTooLargeException _ ->
                     FetchException.permanent("Response body exceeds the limit of " + maxBodyBytes + " bytes");
-            case HttpTimeoutException timeout -> FetchException.retryable("Request timed out", timeout);
+            case HttpTimeoutException timeout -> timedOut(timeout);
             case IOException io -> FetchException.retryable("Network error: " + describe(io), io);
             default -> FetchException.permanent("Request failed: " + describe(cause));
         };

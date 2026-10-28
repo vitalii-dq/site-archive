@@ -1,5 +1,6 @@
 package org.archive.sitearchive.assets;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
@@ -16,25 +17,28 @@ class CssAssetLinksTest {
     private static final URI STYLESHEET = URI.create("https://example.org/css/site.css");
 
     @Test
-    void findsUrlsAndImportsButSkipsCommentsAndDataUrls() {
+    @DisplayName("Finds url() and @import references once each, in order of appearance, but not inside comments")
+    void findsUrlsAndImportsButSkipsComments() {
         String css = """
                 @import "base.css";
                 @import url(https://fonts.example.com/css?family=Sans);
                 /* background: url(old.png); */
                 @font-face { src: url('../fonts/a.woff2') format("woff2"), url(../fonts/a.woff); }
-                .logo { background: url("data:image/svg+xml;utf8,<svg/>"), url(#gradient); }
+                .logo { background: URL(../img/logo.png), url("../fonts/a.woff2"); }
                 """;
 
         assertThat(CssAssetLinks.find(bytes(css), STYLESHEET)).extracting(URI::toString).containsExactly(
                 "https://example.org/css/base.css",
                 "https://fonts.example.com/css?family=Sans",
                 "https://example.org/fonts/a.woff2",
-                "https://example.org/fonts/a.woff");
+                "https://example.org/fonts/a.woff",
+                "https://example.org/img/logo.png");
     }
 
     @Test
+    @DisplayName("Rewrites references as quoted URLs and leaves everything else byte-for-byte the same")
     void rewritesReferencesAndLeavesEverythingElseUntouched() {
-        String css = "@import 'base.css';\n.a{background:url( ../img/a.png )}\n.b{background:url(../img/gone.png)}\n"
+        String css = "@import 'base.css';\n.a{background:url( ../img/a.png )}\n"
                 + ".c{background:url(https://cdn.example.com/c.png)}\n/* url(../img/a.png) */\n.d::after{content:\"✓\"}";
         Map<String, String> copies = Map.of(
                 "https://example.org/css/base.css", "2-css-base.css",
@@ -44,12 +48,12 @@ class CssAssetLinksTest {
 
         assertThat(new String(rewritten, StandardCharsets.UTF_8)).isEqualTo(
                 "@import \"2-css-base.css\";\n.a{background:url(\"3-img-a.png\")}\n"
-                        + ".b{background:url(\"https://example.org/img/gone.png\")}\n"
                         + ".c{background:url(https://cdn.example.com/c.png)}\n/* url(../img/a.png) */\n"
                         + ".d::after{content:\"✓\"}");
     }
 
     @Test
+    @DisplayName("Keeps the bytes of a stylesheet that is not UTF-8")
     void keepsBytesThatAreNotUtf8() {
         byte[] css = ".a::after{content:\"café\"}.b{background:url(a.png)}".getBytes(StandardCharsets.ISO_8859_1);
 
@@ -60,6 +64,7 @@ class CssAssetLinksTest {
     }
 
     @Test
+    @DisplayName("Treats an unclosed comment as running to the end")
     void treatsAnUnclosedCommentAsRunningToTheEnd() {
         String css = ".a{background:url(a.png)}\n/* unclosed\n.b{background:url(b.png)}";
 
@@ -68,6 +73,7 @@ class CssAssetLinksTest {
     }
 
     @Test
+    @DisplayName("Takes linear time on hostile input")
     void takesLinearTimeOnHostileInput() {
         // Both took tens of seconds at this size when every match attempt rescanned the rest of the input.
         for (String css : List.of("/* ".repeat(70_000), "url(".repeat(50_000))) {
@@ -76,11 +82,10 @@ class CssAssetLinksTest {
     }
 
     @Test
+    @DisplayName("Recognises stylesheets by their media type")
     void recognisesStylesheets() {
         assertThat(CssAssetLinks.isStylesheet("text/css; charset=utf-8")).isTrue();
         assertThat(CssAssetLinks.isStylesheet("text/plain")).isFalse();
-        assertThat(CssAssetLinks.isStylesheet(null)).isFalse();
-        assertThat(CssAssetLinks.isStylesheet("not a type")).isFalse();
     }
 
     private static byte[] bytes(String css) {

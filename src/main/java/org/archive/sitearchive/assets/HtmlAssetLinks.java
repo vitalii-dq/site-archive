@@ -6,6 +6,8 @@ import org.jsoup.nodes.DataNode;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.jsoup.select.Evaluator;
+import org.jsoup.select.QueryParser;
 import org.springframework.http.MediaType;
 
 import java.io.ByteArrayInputStream;
@@ -41,6 +43,13 @@ public final class HtmlAssetLinks {
             "stylesheet", "icon", "apple-touch-icon", "apple-touch-icon-precomposed", "mask-icon", "modulepreload");
     private static final Set<String> PRELOAD_DESTINATIONS = Set.of("style", "script", "font", "image");
 
+    private static final Evaluator LINK = QueryParser.parse("link[href]");
+    private static final Evaluator SRC = QueryParser.parse("img[src], script[src], input[type=image][src]");
+    private static final Evaluator POSTER = QueryParser.parse("video[poster]");
+    private static final Evaluator SRCSET = QueryParser.parse("img[srcset], picture > source[srcset]");
+    private static final Evaluator STYLE_ATTRIBUTE = QueryParser.parse("[style]");
+    private static final Evaluator STYLE_ELEMENT = QueryParser.parse("style");
+
     private HtmlAssetLinks() {
     }
 
@@ -75,40 +84,41 @@ public final class HtmlAssetLinks {
         return document.outerHtml().getBytes(document.charset());
     }
 
-    /** {@code styling} handles the references that {@link Found#styling()} lists, {@code other} the rest. */
     private static void visit(Document document, UnaryOperator<String> styling, UnaryOperator<String> other) {
-        for (Element element : document.select("link[href]")) {
-            if (isStylesheetLink(element)) {
-                replaceAttribute(element, "href", styling);
-            } else if (isAssetLink(element)) {
-                replaceAttribute(element, "href", other);
+        for (Element element : document.getAllElements()) {
+            if (element.is(LINK)) {
+                if (isStylesheetLink(element)) {
+                    replaceAttribute(element, "href", styling);
+                } else if (isAssetLink(element)) {
+                    replaceAttribute(element, "href", other);
+                }
             }
-        }
-        for (Element element : document.select("img[src], script[src], input[type=image][src]")) {
-            replaceAttribute(element, "src", other);
-        }
-        for (Element element : document.select("video[poster]")) {
-            replaceAttribute(element, "poster", other);
-        }
-        for (Element element : document.select("img[srcset], picture > source[srcset]")) {
-            String srcset = element.attr("srcset");
-            String rewritten = rewriteSrcset(srcset, other);
-            if (!rewritten.equals(srcset)) {
-                element.attr("srcset", rewritten);
+            if (element.is(SRC)) {
+                replaceAttribute(element, "src", other);
             }
-        }
-        for (Element element : document.select("[style]")) {
-            String css = element.attr("style");
-            String rewritten = CssAssetLinks.rewrite(css, styling);
-            if (!rewritten.equals(css)) {
-                element.attr("style", rewritten);
+            if (element.is(POSTER)) {
+                replaceAttribute(element, "poster", other);
             }
-        }
-        for (Element style : document.select("style")) {
-            String css = style.data();
-            String rewritten = CssAssetLinks.rewrite(css, styling);
-            if (!rewritten.equals(css)) {
-                style.empty().appendChild(new DataNode(rewritten));
+            if (element.is(SRCSET)) {
+                String srcset = element.attr("srcset");
+                String rewritten = rewriteSrcset(srcset, other);
+                if (!rewritten.equals(srcset)) {
+                    element.attr("srcset", rewritten);
+                }
+            }
+            if (element.is(STYLE_ATTRIBUTE)) {
+                String css = element.attr("style");
+                String rewritten = CssAssetLinks.rewrite(css, styling);
+                if (!rewritten.equals(css)) {
+                    element.attr("style", rewritten);
+                }
+            }
+            if (element.is(STYLE_ELEMENT)) {
+                String css = element.data();
+                String rewritten = CssAssetLinks.rewrite(css, styling);
+                if (!rewritten.equals(css)) {
+                    element.empty().appendChild(new DataNode(rewritten));
+                }
             }
         }
     }
@@ -120,8 +130,6 @@ public final class HtmlAssetLinks {
         }
         element.attr(attribute, replacement);
         if (!URI.create(replacement).isAbsolute()) {
-            // The local copy may differ from the original (stylesheets are rewritten), and files opened from disk
-            // cannot pass CORS checks, so integrity and CORS requirements would block it.
             element.removeAttr("integrity").removeAttr("crossorigin");
         }
     }
@@ -172,7 +180,6 @@ public final class HtmlAssetLinks {
             String replacement = replace.apply(url);
             rewritten.append(replacement != null ? replacement : url).append(srcset, urlEnd, position);
             if (urlEnd == position) {
-                // No trailing comma, so descriptors such as "2x" or "480w" follow, up to the next comma.
                 int descriptorsStart = position;
                 while (position < length && srcset.charAt(position) != ',') {
                     position++;
