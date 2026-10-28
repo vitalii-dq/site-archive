@@ -10,6 +10,7 @@ import org.archive.sitearchive.fetch.WebOrigin;
 import org.archive.sitearchive.storage.ArchiveManifest;
 import org.archive.sitearchive.storage.ArchiveStorage;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.util.unit.DataSize;
@@ -67,6 +68,8 @@ class AssetCapturerTest {
     }
 
     @Test
+    @DisplayName("Captures stylesheets and the files they use before images when the limit is reached, and counts "
+            + "the rest as skipped")
     void capturesStylingBeforeImagesWhenTheLimitIsReached() throws Exception {
         List<PageResult> pages = List.of(
                 page(1, "<img src=\"/a.png\"><img src=\"/b.png\">"),
@@ -80,6 +83,7 @@ class AssetCapturerTest {
     }
 
     @Test
+    @DisplayName("Skips nothing below the limit")
     void skipsNothingBelowTheLimit() throws Exception {
         AssetCapturer.Result result = captureAll(List.of(page(1, "<img src=\"/a.png\">")));
 
@@ -88,6 +92,7 @@ class AssetCapturerTest {
     }
 
     @Test
+    @DisplayName("Moves an asset up when a stylesheet turns out to use it")
     void movesAnAssetUpWhenAStylesheetTurnsOutToUseIt() throws Exception {
         List<PageResult> pages = List.of(
                 page(1, "<img src=\"/a.png\">"),
@@ -99,6 +104,31 @@ class AssetCapturerTest {
     }
 
     @Test
+    @DisplayName("Captures only the assets that captured pages use from the site's own origin")
+    void capturesOnlyTheSitesOwnAssetsOfCapturedPages() throws Exception {
+        List<PageResult> pages = List.of(
+                page(1, "<link rel=\"stylesheet\" href=\"https://cdn.example.net/x.css\">"
+                        + "<img src=\"https://cdn.example.net/a.png\"><img src=\"/b.png\">"),
+                new PageResult("https://example.org/2.html", PageStatus.FAILED, null, 404, null, null, 1,
+                        "HTTP status 404"));
+
+        assertThat(sourceUrls(captureAll(pages))).containsExactly("https://example.org/b.png");
+    }
+
+    @Test
+    @DisplayName("Captures a stylesheet only once, even when stylesheets import each other")
+    void capturesAStylesheetOnlyOnce() throws Exception {
+        serve("/a.css", "text/css", "@import \"/b.css\";");
+        serve("/b.css", "text/css", "@import \"/a.css\";");
+
+        AssetCapturer.Result result = captureAll(List.of(page(1, "<link rel=\"stylesheet\" href=\"/a.css\">")));
+
+        assertThat(sourceUrls(result)).containsExactly("https://example.org/a.css", "https://example.org/b.css");
+        assertThat(result.skipped()).isZero();
+    }
+
+    @Test
+    @DisplayName("Stores each asset as downloaded and leaves nothing staged")
     void storesEachAssetAsDownloadedAndLeavesNothingStaged() throws Exception {
         serve("/site.css", "text/css", "body { color: red }");
 
@@ -111,6 +141,7 @@ class AssetCapturerTest {
     }
 
     @Test
+    @DisplayName("Records a failed download with its reason and discards what was downloaded")
     void discardsAFailedDownload() throws Exception {
         site.put(URI.create("https://example.org/a.png"), new Served("image/png", null));
 

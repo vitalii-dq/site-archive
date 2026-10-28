@@ -5,6 +5,7 @@ import org.archive.sitearchive.archive.RecoveredJobs;
 import org.archive.sitearchive.config.ArchiveProperties;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -14,6 +15,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,6 +53,7 @@ class ArchiveWorkersTest {
     }
 
     @Test
+    @DisplayName("Marks a job stopped by an exception as failed and moves on to the next one")
     void marksAJobThatStoppedUnexpectedlyAsFailedAndMovesOn(CapturedOutput output) throws Exception {
         UUID failing = UUID.randomUUID();
         UUID next = UUID.randomUUID();
@@ -68,6 +72,7 @@ class ArchiveWorkersTest {
     }
 
     @Test
+    @DisplayName("Keeps the worker when a failed job cannot be marked as failed")
     void reportsAJobThatCouldNotEvenBeMarkedAsFailed(CapturedOutput output) throws Exception {
         UUID job = UUID.randomUUID();
         when(lifecycle.claimNextQueuedJob())
@@ -83,6 +88,7 @@ class ArchiveWorkersTest {
     }
 
     @Test
+    @DisplayName("Tries claiming a job again after a failure")
     void retriesClaimingAfterAFailure(CapturedOutput output) throws Exception {
         UUID job = UUID.randomUUID();
         when(lifecycle.claimNextQueuedJob())
@@ -97,6 +103,7 @@ class ArchiveWorkersTest {
     }
 
     @Test
+    @DisplayName("Counts an error as a crash of the job, which is requeued, and moves on")
     void countsAnErrorAsACrashOfTheJobAndMovesOn(CapturedOutput output) throws Exception {
         UUID job = UUID.randomUUID();
         UUID next = UUID.randomUUID();
@@ -117,6 +124,7 @@ class ArchiveWorkersTest {
     }
 
     @Test
+    @DisplayName("Reports a job that failed on reaching the crash limit")
     void reportsAJobThatFailedOnReachingTheCrashLimit(CapturedOutput output) throws Exception {
         UUID job = UUID.randomUUID();
         when(lifecycle.claimNextQueuedJob())
@@ -132,6 +140,23 @@ class ArchiveWorkersTest {
     }
 
     @Test
+    @DisplayName("Keeps the worker when the crash of a job cannot be recorded")
+    void reportsAJobWhoseCrashCouldNotBeRecorded(CapturedOutput output) throws Exception {
+        UUID job = UUID.randomUUID();
+        when(lifecycle.claimNextQueuedJob())
+                .thenReturn(Optional.of(job))
+                .thenReturn(Optional.empty());
+        doThrow(new StackOverflowError()).when(processor).process(job);
+        when(lifecycle.recordCrash(job, MAX_CRASHES)).thenThrow(new IllegalStateException("database down"));
+
+        workers.start();
+
+        verify(lifecycle, timeout(1000).atLeast(2)).claimNextQueuedJob();
+        assertThat(output).contains("Archive job " + job + " could not be requeued and stays RUNNING");
+    }
+
+    @Test
+    @DisplayName("Keeps the worker after an error outside a job")
     void keepsTheWorkerAfterAnErrorOutsideAJob(CapturedOutput output) throws Exception {
         UUID job = UUID.randomUUID();
         when(lifecycle.claimNextQueuedJob())
@@ -146,6 +171,27 @@ class ArchiveWorkersTest {
     }
 
     @Test
+    @DisplayName("Stopping interrupts the workers, which hand their jobs back to the queue")
+    void stopHandsTheRunningJobBackToTheQueue() throws Exception {
+        UUID job = UUID.randomUUID();
+        CountDownLatch processing = new CountDownLatch(1);
+        when(lifecycle.claimNextQueuedJob()).thenReturn(Optional.of(job));
+        doAnswer(invocation -> {
+            processing.countDown();
+            new CountDownLatch(1).await(); // until interrupted
+            return null;
+        }).when(processor).process(job);
+
+        workers.start();
+        assertThat(processing.await(1, TimeUnit.SECONDS)).isTrue();
+        workers.stop();
+
+        assertThat(workers.isRunning()).isFalse();
+        verify(lifecycle).requeueStoppedJob(job);
+    }
+
+    @Test
+    @DisplayName("Requeues an interrupted job and stops the worker")
     void requeuesAnInterruptedJobAndStopsTheWorker(CapturedOutput output) throws Exception {
         UUID job = UUID.randomUUID();
         when(lifecycle.claimNextQueuedJob())
@@ -162,6 +208,8 @@ class ArchiveWorkersTest {
     }
 
     @Test
+    @DisplayName("Requeues a job aborted by an interrupt with the interrupt put aside, "
+            + "then stops the worker")
     void requeuesAJobAbortedByAnInterruptWithTheInterruptPutAside() throws Exception {
         UUID job = UUID.randomUUID();
         AtomicReference<Boolean> interruptedWhileRequeuing = new AtomicReference<>();
@@ -186,6 +234,7 @@ class ArchiveWorkersTest {
     }
 
     @Test
+    @DisplayName("Recovers the jobs left running by a crash before starting")
     void recoversCrashedJobsBeforeStarting(CapturedOutput output) {
         UUID requeued = UUID.randomUUID();
         UUID failed = UUID.randomUUID();

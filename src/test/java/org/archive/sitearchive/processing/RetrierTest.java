@@ -2,6 +2,7 @@ package org.archive.sitearchive.processing;
 
 import org.archive.sitearchive.config.ArchiveProperties;
 import org.archive.sitearchive.fetch.FetchException;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -17,6 +18,7 @@ class RetrierTest {
     private final AtomicInteger calls = new AtomicInteger();
 
     @Test
+    @DisplayName("Retries retryable failures until an attempt succeeds")
     void retriesRetryableFailuresUntilAnAttemptSucceeds() throws Exception {
         String result = retrier.run(3, () -> {
             if (calls.incrementAndGet() < 3) {
@@ -30,6 +32,7 @@ class RetrierTest {
     }
 
     @Test
+    @DisplayName("Retries actions without a result in the same way")
     void retriesActionsWithoutAResult() throws Exception {
         retrier.run(3, () -> {
             if (calls.incrementAndGet() < 2) {
@@ -41,6 +44,7 @@ class RetrierTest {
     }
 
     @Test
+    @DisplayName("Rethrows the last failure once the attempts are used up")
     void rethrowsTheLastFailureOnceTheAttemptsAreUsedUp() {
         FetchException last = FetchException.retryable("still down");
 
@@ -52,6 +56,7 @@ class RetrierTest {
     }
 
     @Test
+    @DisplayName("Does not retry permanent failures or runtime exceptions")
     void doesNotRetryPermanentFailuresOrRuntimeExceptions() {
         assertThatThrownBy(() -> retrier.run(3, () -> {
             calls.incrementAndGet();
@@ -65,6 +70,7 @@ class RetrierTest {
     }
 
     @Test
+    @DisplayName("Stops when interrupted during the backoff")
     void stopsWhenInterruptedDuringTheBackoff() {
         Thread.currentThread().interrupt();
         try {
