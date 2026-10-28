@@ -23,6 +23,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,6 +35,13 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * Each method is one transaction. Job responses combine the job row with counts of its page rows, and a worker
+ * records the sitemap counts and creates the pages in one transaction. Under PostgreSQL's default READ COMMITTED
+ * each query sees its own snapshot, so a job read just before that commit could be reported with page counts read
+ * just after it, breaking {@code sitemapUrlCount = pages + excludedUrlCount}. Those reads therefore run in a
+ * REPEATABLE READ transaction, which in PostgreSQL never fails with serialisation errors when it is read-only.
+ */
 @Service
 class ArchiveService {
 
@@ -54,16 +63,19 @@ class ArchiveService {
         this.clock = clock;
     }
 
+    @Transactional
     ArchiveCreatedResponse createJob(CreateArchiveRequest request) {
         String sitemapUrl = HttpUrls.parse(request.sitemapUrl()).orElseThrow().toString();
         int maxPages = request.maxPages() != null ? request.maxPages() : limits.defaultMaxPages();
         return ArchiveCreatedResponse.from(jobs.save(ArchiveJob.queue(sitemapUrl, maxPages, clock.instant())));
     }
 
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     ArchiveJobResponse getJob(UUID jobId) {
         return toResponse(findJob(jobId), pageCounts(List.of(jobId)));
     }
 
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     PagedResponse<ArchiveJobResponse> listJobs(ArchiveJobStatus status, Pageable pageable) {
         Pageable pageRequest = sorted(pageable, NEWEST_JOBS_FIRST);
         Page<ArchiveJob> result = status == null
@@ -73,6 +85,7 @@ class ArchiveService {
         return PagedResponse.from(result, job -> toResponse(job, counts));
     }
 
+    @Transactional(readOnly = true)
     PagedResponse<ArchivePageResponse> listPages(UUID jobId, PageStatus status, Pageable pageable) {
         if (!jobs.existsById(jobId)) {
             throw new ArchiveNotFoundException(jobId);
@@ -84,6 +97,7 @@ class ArchiveService {
         return PagedResponse.from(result, ArchivePageResponse::from);
     }
 
+    @Transactional(readOnly = true)
     ArchiveDownload getDownload(UUID jobId) {
         ArchiveJob job = findJob(jobId);
         if (!job.getStatus().hasArchive()) {

@@ -2,7 +2,7 @@ package org.archive.sitearchive.processing;
 
 import org.archive.sitearchive.archive.PageResult;
 import org.archive.sitearchive.archive.PageStatus;
-import org.archive.sitearchive.config.ArchiveProperties;
+import org.archive.sitearchive.config.TestArchiveProperties;
 import org.archive.sitearchive.fetch.FetchException;
 import org.archive.sitearchive.fetch.FetchedResponse;
 import org.archive.sitearchive.fetch.HttpFetcher;
@@ -13,7 +13,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.util.unit.DataSize;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
@@ -22,7 +21,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,15 +54,12 @@ class AssetCapturerTest {
 
     @BeforeEach
     void setUp() {
-        storage = new ArchiveStorage(new ArchiveProperties(new ArchiveProperties.Storage(root), null, null, null, null),
+        storage = new ArchiveStorage(TestArchiveProperties.builder().storageRoot(root).build(),
                 JsonMapper.builder().build());
         storage.prepareJobDirectory(JOB);
         capturer = new AssetCapturer(fetcher, storage,
-                new Retrier(new ArchiveProperties(null, null, null,
-                        new ArchiveProperties.Retry(1, Duration.ofMillis(1), 2.0, Duration.ofMillis(1)), null)),
-                new ArchiveProperties(null, new ArchiveProperties.Limits(1, 1, DataSize.ofMegabytes(1),
-                        DataSize.ofMegabytes(1), DataSize.ofMegabytes(1), MAX_ASSETS, 0, Duration.ofSeconds(1),
-                        Duration.ofSeconds(1)), null, null, null));
+                new Retrier(TestArchiveProperties.builder().maxAttempts(1).build()),
+                TestArchiveProperties.builder().maxAssetsPerJob(MAX_ASSETS).build());
     }
 
     @Test

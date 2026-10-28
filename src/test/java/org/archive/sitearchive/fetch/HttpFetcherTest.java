@@ -2,7 +2,7 @@ package org.archive.sitearchive.fetch;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import org.archive.sitearchive.config.ArchiveProperties;
+import org.archive.sitearchive.config.TestArchiveProperties;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-import org.springframework.util.unit.DataSize;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -267,9 +266,11 @@ class HttpFetcherTest {
 
     private HttpFetcher fetcher(Duration requestTimeout) {
         return new HttpFetcher(HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build(),
-                new ArchiveProperties(null, new ArchiveProperties.Limits(1, 1, DataSize.ofBytes(MAX_BYTES),
-                        DataSize.ofBytes(MAX_BYTES), DataSize.ofBytes(MAX_BYTES), 1, MAX_REDIRECTS,
-                        Duration.ofSeconds(5), requestTimeout), new ArchiveProperties.Fetch(USER_AGENT), null, null));
+                TestArchiveProperties.builder()
+                        .maxRedirects(MAX_REDIRECTS)
+                        .requestTimeout(requestTimeout)
+                        .userAgent(USER_AGENT)
+                        .build());
     }
 
     private URI url(String path) {

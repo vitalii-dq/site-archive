@@ -1,6 +1,6 @@
 package org.archive.sitearchive.storage;
 
-import org.archive.sitearchive.config.ArchiveProperties;
+import org.archive.sitearchive.config.TestArchiveProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -45,7 +45,7 @@ class ArchiveStorageTest {
 
     @BeforeEach
     void createStorage() {
-        storage = new ArchiveStorage(new ArchiveProperties(new ArchiveProperties.Storage(root), null, null, null, null),
+        storage = new ArchiveStorage(TestArchiveProperties.builder().storageRoot(root).build(),
                 jsonMapper);
         storage.prepareJobDirectory(JOB);
     }

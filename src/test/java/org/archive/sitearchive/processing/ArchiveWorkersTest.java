@@ -2,7 +2,7 @@ package org.archive.sitearchive.processing;
 
 import org.archive.sitearchive.archive.ArchiveJobLifecycle;
 import org.archive.sitearchive.archive.RecoveredJobs;
-import org.archive.sitearchive.config.ArchiveProperties;
+import org.archive.sitearchive.config.TestArchiveProperties;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -11,7 +11,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -38,7 +37,7 @@ class ArchiveWorkersTest {
     private final ArchiveJobLifecycle lifecycle = mock(ArchiveJobLifecycle.class);
     private final ArchiveJobProcessor processor = mock(ArchiveJobProcessor.class);
     private final ArchiveWorkers workers = new ArchiveWorkers(lifecycle, processor,
-            new ArchiveProperties(null, null, null, null, new ArchiveProperties.Worker(1, Duration.ofMillis(10), MAX_CRASHES)));
+            TestArchiveProperties.builder().concurrency(1).maxCrashesPerJob(MAX_CRASHES).build());
 
     @BeforeEach
     void nothingToRecover() {

@@ -1,11 +1,10 @@
 package org.archive.sitearchive.processing;
 
-import org.archive.sitearchive.config.ArchiveProperties;
+import org.archive.sitearchive.config.TestArchiveProperties;
 import org.archive.sitearchive.fetch.FetchException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -13,8 +12,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class RetrierTest {
 
-    private final Retrier retrier = new Retrier(new ArchiveProperties(null, null, null,
-            new ArchiveProperties.Retry(3, Duration.ofMillis(1), 2.0, Duration.ofMillis(5)), null));
+    private final Retrier retrier = new Retrier(TestArchiveProperties.builder().maxAttempts(3).build());
     private final AtomicInteger calls = new AtomicInteger();
 
     @Test

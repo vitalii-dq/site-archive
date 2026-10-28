@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,7 @@ import static org.archive.sitearchive.archive.ArchiveJobStatus.FAILED;
 import static org.archive.sitearchive.archive.ArchiveJobStatus.QUEUED;
 import static org.archive.sitearchive.archive.ArchiveJobStatus.RUNNING;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 @Import(PostgresTestConfiguration.class)
@@ -72,6 +74,13 @@ class ArchiveJobRepositoryTest {
         entityManager.clear();
 
         assertThat(jobs.findById(queued)).map(ArchiveJob::getStatus).contains(RUNNING);
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @DisplayName("lockOldestQueued refuses to run outside a transaction, as its lock would be released at once")
+    void requiresATransaction() {
+        assertThatThrownBy(jobs::lockOldestQueued).isInstanceOf(IllegalTransactionStateException.class);
     }
 
     @Test

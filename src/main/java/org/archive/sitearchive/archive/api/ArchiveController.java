@@ -64,6 +64,7 @@ class ArchiveController {
                 .contentType(ZIP)
                 .headers(headers -> headers.setContentDisposition(
                         ContentDisposition.attachment().filename(download.fileName()).build()))
+                .header("X-Content-Type-Options", "nosniff")
                 .body(new FileSystemResource(download.file()));
     }
 }

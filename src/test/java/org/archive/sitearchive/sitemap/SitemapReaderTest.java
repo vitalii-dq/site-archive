@@ -1,6 +1,6 @@
 package org.archive.sitearchive.sitemap;
 
-import org.archive.sitearchive.config.ArchiveProperties;
+import org.archive.sitearchive.config.TestArchiveProperties;
 import org.archive.sitearchive.fetch.FetchedResponse;
 import org.archive.sitearchive.fetch.HttpFetcher;
 import org.archive.sitearchive.fetch.WebOrigin;
@@ -8,11 +8,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-import org.springframework.util.unit.DataSize;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -29,10 +27,7 @@ class SitemapReaderTest {
     private static final byte[] GZIP_MAGIC = {0x1f, (byte) 0x8b, 0x08};
 
     private final HttpFetcher fetcher = mock(HttpFetcher.class);
-    private final SitemapReader reader = new SitemapReader(fetcher, new SitemapParser(), new ArchiveProperties(null,
-            new ArchiveProperties.Limits(100, 1000, DataSize.ofMegabytes(10), DataSize.ofMegabytes(5),
-                    DataSize.ofMegabytes(10), 2000, 5, Duration.ofSeconds(5), Duration.ofSeconds(20)),
-            null, null, null));
+    private final SitemapReader reader = new SitemapReader(fetcher, new SitemapParser(), TestArchiveProperties.defaults());
 
     @Test
     @DisplayName("Selects distinct pages on the origin up to maxPages and counts every other entry as excluded")

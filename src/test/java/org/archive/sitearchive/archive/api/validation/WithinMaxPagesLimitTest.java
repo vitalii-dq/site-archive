@@ -4,6 +4,7 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import org.archive.sitearchive.archive.api.dto.CreateArchiveRequest;
 import org.archive.sitearchive.config.ArchiveProperties;
+import org.archive.sitearchive.config.TestArchiveProperties;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -12,10 +13,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.context.support.GenericApplicationContext;
-import org.springframework.util.unit.DataSize;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
-import java.time.Duration;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,10 +30,10 @@ class WithinMaxPagesLimitTest {
     @BeforeAll
     static void createValidator() {
         context = new GenericApplicationContext();
-        context.registerBean(ArchiveProperties.class, () -> new ArchiveProperties(null,
-                new ArchiveProperties.Limits(10, LIMIT, DataSize.ofMegabytes(10), DataSize.ofMegabytes(5),
-                        DataSize.ofMegabytes(25), 2000, 5, Duration.ofSeconds(5), Duration.ofSeconds(20)),
-                null, null, null));
+        context.registerBean(ArchiveProperties.class, () -> TestArchiveProperties.builder()
+                .defaultMaxPages(10)
+                .maxPagesLimit(LIMIT)
+                .build());
         context.registerBean(LocalValidatorFactoryBean.class);
         context.refresh();
         validator = context.getBean(LocalValidatorFactoryBean.class);

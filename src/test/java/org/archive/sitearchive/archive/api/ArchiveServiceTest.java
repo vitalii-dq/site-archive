@@ -17,6 +17,7 @@ import org.archive.sitearchive.archive.api.error.ArchiveFileMissingException;
 import org.archive.sitearchive.archive.api.error.ArchiveNotFoundException;
 import org.archive.sitearchive.archive.api.error.ArchiveNotReadyException;
 import org.archive.sitearchive.config.ArchiveProperties;
+import org.archive.sitearchive.config.TestArchiveProperties;
 import org.archive.sitearchive.storage.ArchiveStorage;
 import org.archive.sitearchive.web.PagedResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,14 +32,12 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
-import org.springframework.util.unit.DataSize;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.UUID;
@@ -75,10 +74,10 @@ class ArchiveServiceTest {
 
     @BeforeEach
     void createService() {
-        ArchiveProperties properties = new ArchiveProperties(new ArchiveProperties.Storage(storageRoot),
-                new ArchiveProperties.Limits(DEFAULT_MAX_PAGES, 100, DataSize.ofMegabytes(10), DataSize.ofMegabytes(5),
-                        DataSize.ofMegabytes(25), 2000, 5, Duration.ofSeconds(5), Duration.ofSeconds(20)),
-                null, null, null);
+        ArchiveProperties properties = TestArchiveProperties.builder()
+                .storageRoot(storageRoot)
+                .defaultMaxPages(DEFAULT_MAX_PAGES)
+                .build();
         service = new ArchiveService(jobs, pages, new ArchiveStorage(properties, JsonMapper.builder().build()),
                 properties, Clock.fixed(NOW, ZoneOffset.UTC));
     }

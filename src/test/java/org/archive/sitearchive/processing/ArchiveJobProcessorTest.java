@@ -5,7 +5,7 @@ import org.archive.sitearchive.archive.JobSnapshot;
 import org.archive.sitearchive.archive.PageResult;
 import org.archive.sitearchive.archive.PageStatus;
 import org.archive.sitearchive.archive.PendingPage;
-import org.archive.sitearchive.config.ArchiveProperties;
+import org.archive.sitearchive.config.TestArchiveProperties;
 import org.archive.sitearchive.fetch.FetchException;
 import org.archive.sitearchive.fetch.FetchedResponse;
 import org.archive.sitearchive.fetch.WebOrigin;
@@ -24,7 +24,6 @@ import org.mockito.ArgumentCaptor;
 import java.net.URI;
 import java.nio.file.Path;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -60,8 +59,7 @@ class ArchiveJobProcessorTest {
     private final ArchiveStorage storage = mock(ArchiveStorage.class);
     private final ArchiveJobProcessor processor = new ArchiveJobProcessor(lifecycle, sitemapReader, pageCapturer,
             assetCapturer, storage,
-            new Retrier(new ArchiveProperties(null, null, null,
-                    new ArchiveProperties.Retry(MAX_ATTEMPTS, Duration.ofMillis(1), 2.0, Duration.ofMillis(1)), null)),
+            new Retrier(TestArchiveProperties.builder().maxAttempts(MAX_ATTEMPTS).build()),
             Clock.fixed(NOW, ZoneOffset.UTC));
 
     @BeforeEach

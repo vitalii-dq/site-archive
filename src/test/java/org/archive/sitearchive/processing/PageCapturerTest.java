@@ -1,6 +1,6 @@
 package org.archive.sitearchive.processing;
 
-import org.archive.sitearchive.config.ArchiveProperties;
+import org.archive.sitearchive.config.TestArchiveProperties;
 import org.archive.sitearchive.fetch.FetchException;
 import org.archive.sitearchive.fetch.FetchedResponse;
 import org.archive.sitearchive.fetch.HttpFetcher;
@@ -14,7 +14,6 @@ import org.springframework.util.unit.DataSize;
 
 import java.net.URI;
 import java.nio.file.Path;
-import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -30,8 +29,7 @@ class PageCapturerTest {
 
     private final HttpFetcher fetcher = mock(HttpFetcher.class);
     private final PageCapturer capturer = new PageCapturer(fetcher,
-            new ArchiveProperties(null, new ArchiveProperties.Limits(1, 1, DataSize.ofMegabytes(1), MAX_PAGE_SIZE,
-                    DataSize.ofMegabytes(1), 1, 0, Duration.ofSeconds(1), Duration.ofSeconds(1)), null, null, null));
+            TestArchiveProperties.builder().maxPageSize(MAX_PAGE_SIZE).build());
 
     @ParameterizedTest
     @ValueSource(strings = {"text/html; charset=utf-8", "application/xhtml+xml"})
