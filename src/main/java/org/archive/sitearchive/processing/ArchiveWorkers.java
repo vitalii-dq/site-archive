@@ -19,7 +19,9 @@ import java.util.concurrent.TimeUnit;
  * Fixed pool of virtual-thread workers that claim and process queued jobs. On start, jobs left RUNNING by the
  * previous process are recovered (assumes a single instance). On shutdown, each worker hands its job back to the
  * queue. A job stopped by an {@link Error} counts as a crash of that job, and the worker carries on.
- * {@link OutOfMemoryError} is left to {@code -XX:+ExitOnOutOfMemoryError}, which stops the whole JVM.
+ * {@link OutOfMemoryError} is left to {@code -XX:+ExitOnOutOfMemoryError}, which stops the whole JVM before the
+ * error gets here; {@code bootRun} sets it, and the README asks for it when running the jar. Without the flag, an
+ * {@code OutOfMemoryError} is counted as a crash like any other {@code Error}.
  */
 @Component
 class ArchiveWorkers implements SmartLifecycle {

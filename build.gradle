@@ -37,6 +37,10 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
+tasks.named('bootRun') {
+     jvmArgs '-XX:+ExitOnOutOfMemoryError'
+}
+
 tasks.named('jar') {
     // Only the executable boot jar is needed.
     enabled = false

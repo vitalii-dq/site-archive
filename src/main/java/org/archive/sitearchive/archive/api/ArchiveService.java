@@ -114,7 +114,7 @@ class ArchiveService {
         return jobs.findById(jobId).orElseThrow(() -> new ArchiveNotFoundException(jobId));
     }
 
-    /** The order is fixed by the API; any sort requested by the lient is ignored. */
+    /** The order is fixed by the API; any sort requested by the client is ignored. */
     private static Pageable sorted(Pageable pageable, Sort sort) {
         return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
     }

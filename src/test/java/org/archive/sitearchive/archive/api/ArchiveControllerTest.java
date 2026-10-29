@@ -24,6 +24,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -68,7 +69,7 @@ class ArchiveControllerTest {
     private ArchiveService service;
 
     @Test
-    @DisplayName("POST queues a job and answers 202 with its id, status and creation time")
+    @DisplayName("POST queues a job and answers 202 with its id, status and creation time, and the job's URL")
     void createsAJob() {
         when(service.createJob(new CreateArchiveRequest(SITEMAP_URL, 50)))
                 .thenReturn(new ArchiveCreatedResponse(ID, ArchiveJobStatus.QUEUED, CREATED_AT));
@@ -77,6 +78,7 @@ class ArchiveControllerTest {
                 .content("""
                         {"sitemapUrl": "%s", "maxPages": 50}""".formatted(SITEMAP_URL)))
                 .hasStatus(HttpStatus.ACCEPTED)
+                .hasHeader(HttpHeaders.LOCATION, "http://localhost/api/v1/archives/" + ID)
                 .bodyJson().isStrictlyEqualTo("""
                         {"id": "%s", "status": "QUEUED", "createdAt": "2026-10-27T18:00:00Z"}""".formatted(ID));
     }

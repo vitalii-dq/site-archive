@@ -21,7 +21,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
+import java.net.URI;
 import java.util.UUID;
 
 @RestController
@@ -38,7 +40,9 @@ class ArchiveController {
 
     @PostMapping
     ResponseEntity<ArchiveCreatedResponse> create(@Valid @RequestBody CreateArchiveRequest request) {
-        return ResponseEntity.accepted().body(archiveService.createJob(request));
+        ArchiveCreatedResponse created = archiveService.createJob(request);
+        URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(created.id()).toUri();
+        return ResponseEntity.accepted().location(location).body(created);
     }
 
     @GetMapping("/{id}")
