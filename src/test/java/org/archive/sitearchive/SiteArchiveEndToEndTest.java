@@ -151,6 +151,8 @@ class SiteArchiveEndToEndTest {
                 .contains("<img src=\"../assets/3-img-logo.png\">");
         assertThat(text(zip, "assets/1-css-site.css")).isEqualTo("body{background:url(\"2-img-bg.png\")}");
         assertThat(zip.get("assets/3-img-logo.png")).isEqualTo(PNG);
+        await().atMost(FINISH_TIMEOUT).untilAsserted(() -> assertThat(storageRoot.resolve(created.id().toString()))
+                .isDirectoryNotContaining(path -> !path.getFileName().toString().equals("archive.zip")));
     }
 
     @Test

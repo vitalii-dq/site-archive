@@ -127,7 +127,7 @@ class ArchiveJobProcessor {
         return assets;
     }
 
-    /** Publishes the ZIP and completes the job. At least one page was captured. */
+    /** Publishes the ZIP, completes the job, then deletes the captured files. At least one page was captured. */
     private void finish(JobSnapshot job, WebOrigin siteOrigin, List<PageResult> pages,
                         AssetCapturer.Result assets) {
         long succeeded = pages.stream().filter(PageResult::captured).count();
@@ -141,6 +141,19 @@ class ArchiveJobProcessor {
                 : "%d of %d pages could not be captured. See the page list for details.".formatted(failed, pages.size());
         lifecycle.completeJob(job.id(), failed > 0, archive, errorSummary);
         log.info("Archive job {} completed: {} of {} pages captured", job.id(), succeeded, pages.size());
+        deleteCapturedFiles(job.id());
+    }
+
+    /**
+     * The ZIP holds everything now. Only once the job has completed, though: until then a crash runs it again,
+     * which needs the captured pages. The job stays completed if this fails; the files only take up space.
+     */
+    private void deleteCapturedFiles(UUID jobId) {
+        try {
+            storage.deleteCapturedFiles(jobId);
+        } catch (RuntimeException e) {
+            log.warn("Archive job {}: could not delete the captured files after packaging them", jobId, e);
+        }
     }
 
     private static ArchiveManifest.Entry manifestEntry(PageResult page) {

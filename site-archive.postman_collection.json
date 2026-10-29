@@ -1,0 +1,155 @@
+{
+  "info": {
+    "name": "Site Archive",
+    "description": "Archive API (`ArchiveController`). Run **Create archive** first: it stores the new job ID in `archiveId`, which the other requests use.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api/v1" },
+    { "key": "sitemapUrl", "value": "https://example.org/sitemap.xml" },
+    { "key": "archiveId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Create archive",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
+              "const body = pm.response.json();",
+              "pm.test('Job is queued', () => pm.expect(body.status).to.eql('QUEUED'));",
+              "pm.collectionVariables.set('archiveId', body.id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sitemapUrl\": \"{{sitemapUrl}}\",\n  \"maxPages\": 50\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/archives",
+          "host": ["{{baseUrl}}"],
+          "path": ["archives"]
+        },
+        "description": "Creates a job and returns immediately. `maxPages` is optional; values above `archive.limits.max-pages-limit` return 400."
+      }
+    },
+    {
+      "name": "Get archive",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('Same job', () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('archiveId')));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/archives/{{archiveId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["archives", "{{archiveId}}"]
+        },
+        "description": "Status, progress, timestamps and error summary. 404 for an unknown ID."
+      }
+    },
+    {
+      "name": "List archives",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('Paged response', () => pm.expect(pm.response.json().items).to.be.an('array'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/archives?page=0&size=20&status=COMPLETED",
+          "host": ["{{baseUrl}}"],
+          "path": ["archives"],
+          "query": [
+            { "key": "page", "value": "0", "description": "0-based" },
+            { "key": "size", "value": "20", "description": "At most 100" },
+            { "key": "status", "value": "COMPLETED", "description": "QUEUED, RUNNING, COMPLETED, COMPLETED_WITH_ERRORS or FAILED", "disabled": true }
+          ]
+        },
+        "description": "All jobs, newest first."
+      }
+    },
+    {
+      "name": "List pages",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('Paged response', () => pm.expect(pm.response.json().items).to.be.an('array'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/archives/{{archiveId}}/pages?page=0&size=20&status=FAILED",
+          "host": ["{{baseUrl}}"],
+          "path": ["archives", "{{archiveId}}", "pages"],
+          "query": [
+            { "key": "page", "value": "0", "description": "0-based" },
+            { "key": "size", "value": "20", "description": "At most 100" },
+            { "key": "status", "value": "FAILED", "description": "PENDING, SUCCEEDED or FAILED", "disabled": true }
+          ]
+        },
+        "description": "Outcome of each page, in sitemap order."
+      }
+    },
+    {
+      "name": "Download archive",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('ZIP attachment', () => {",
+              "    pm.response.to.have.header('Content-Type', 'application/zip');",
+              "    pm.expect(pm.response.headers.get('Content-Disposition')).to.include('attachment');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/archives/{{archiveId}}/download",
+          "host": ["{{baseUrl}}"],
+          "path": ["archives", "{{archiveId}}", "download"]
+        },
+        "description": "The finished ZIP. 409 while the job is QUEUED, RUNNING or FAILED; 410 if the file is gone from disk. Use \"Send and Download\" in Postman to save it."
+      }
+    }
+  ]
+}

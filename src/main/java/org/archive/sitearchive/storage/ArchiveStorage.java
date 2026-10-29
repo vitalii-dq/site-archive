@@ -27,7 +27,8 @@ import java.util.zip.ZipOutputStream;
  *               /archive.zip     index.html, manifest.json, pages/ and assets/, with links rewritten
  * </pre>
  * Every file is written to {@code .staging} first and then moved into place atomically, so readers only
- * ever see complete files and re-running a job simply replaces them.
+ * ever see complete files and re-running a job simply replaces them. Once the job has completed, only the ZIP is
+ * kept.
  */
 @Component
 public class ArchiveStorage {
@@ -59,6 +60,21 @@ public class ArchiveStorage {
             Files.createDirectories(jobDirectory.resolve(CaptureFileNames.ASSETS_DIRECTORY));
         } catch (IOException e) {
             throw new UncheckedIOException("Could not prepare the directory for archive " + jobId, e);
+        }
+    }
+
+    /**
+     * Deletes everything in the job directory except the ZIP: the captured pages and assets, and the staging
+     * directory. Only for a finished job, which never runs again; an unfinished one still needs its pages.
+     */
+    public void deleteCapturedFiles(UUID jobId) {
+        try {
+            Path jobDirectory = jobDirectory(jobId);
+            FileSystemUtils.deleteRecursively(jobDirectory.resolve(CaptureFileNames.PAGES_DIRECTORY));
+            FileSystemUtils.deleteRecursively(jobDirectory.resolve(CaptureFileNames.ASSETS_DIRECTORY));
+            FileSystemUtils.deleteRecursively(jobDirectory.resolve(STAGING_DIRECTORY));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not delete the captured files of archive " + jobId, e);
         }
     }
 

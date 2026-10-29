@@ -20,7 +20,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -30,10 +33,13 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -189,6 +195,50 @@ class ArchiveJobProcessorTest {
         verifyNoInteractions(assetCapturer);
         verify(storage, never()).publishArchive(any(), any());
         verify(lifecycle, never()).completeJob(any(), anyBoolean(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Deletes the captured files only once the job has completed, as a crash before that runs it again")
+    void deletesTheCapturedFilesAfterCompletingTheJob() throws Exception {
+        loadCapturedJob();
+
+        processor.process(JOB);
+
+        InOrder order = inOrder(storage, lifecycle);
+        order.verify(storage).publishArchive(eq(JOB), any());
+        order.verify(lifecycle).completeJob(JOB, false, ARCHIVE, null);
+        order.verify(storage).deleteCapturedFiles(JOB);
+    }
+
+    @Test
+    @DisplayName("Keeps the captured files if the job could not be completed")
+    void keepsTheCapturedFilesIfTheJobCannotBeCompleted() throws Exception {
+        loadCapturedJob();
+        doThrow(new IllegalStateException("database down")).when(lifecycle).completeJob(JOB, false, ARCHIVE, null);
+
+        assertThatIllegalStateException().isThrownBy(() -> processor.process(JOB));
+
+        verify(storage, never()).deleteCapturedFiles(any());
+    }
+
+    @Test
+    @DisplayName("A job whose captured files cannot be deleted stays completed")
+    void ignoresAFailureToDeleteTheCapturedFiles() throws Exception {
+        loadCapturedJob();
+        doThrow(new UncheckedIOException(new IOException("busy"))).when(storage).deleteCapturedFiles(JOB);
+
+        processor.process(JOB);
+
+        verify(lifecycle).completeJob(JOB, false, ARCHIVE, null);
+    }
+
+    /** A resumed job with one captured page and no assets, ready to be packaged. */
+    private void loadCapturedJob() throws Exception {
+        loadJob(SITE);
+        List<PageResult> pages = List.of(new PageResult("https://example.org/a", PageStatus.SUCCEEDED,
+                "pages/1.html", 200, "text/html", "https://example.org/a", 1, null));
+        when(lifecycle.pageResults(JOB)).thenReturn(pages);
+        when(assetCapturer.captureAll(JOB, SITE, pages)).thenReturn(new AssetCapturer.Result(List.of(), 0));
     }
 
     private void loadJob(WebOrigin recordedOrigin) {

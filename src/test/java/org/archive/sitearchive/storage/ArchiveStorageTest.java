@@ -112,6 +112,21 @@ class ArchiveStorageTest {
         assertThat(root.resolve(JOB + "/assets")).isEmptyDirectory();
     }
 
+    @Test
+    @DisplayName("Deleting the captured files of a finished job keeps only the ZIP")
+    void deletesTheCapturedFilesButKeepsTheArchive() throws IOException {
+        StoredArchive archive = storage.publishArchive(JOB, captureOnePage());
+        byte[] zip = Files.readAllBytes(root.resolve(archive.relativePath()));
+        staged("incomplete");
+
+        storage.deleteCapturedFiles(JOB);
+
+        try (var files = Files.list(root.resolve(JOB.toString()))) {
+            assertThat(files).containsExactly(root.resolve(archive.relativePath()));
+        }
+        assertThat(root.resolve(archive.relativePath())).hasBinaryContent(zip);
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"../outside.zip", JOB_ID + "/../../outside.zip", "/etc/passwd"})
     @DisplayName("Refuses to resolve a stored path outside the storage root")
